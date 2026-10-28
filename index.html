@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>FinalACT</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=JetBrains+Mono:wght@400;600&display=swap">
+<link rel="stylesheet" href="vendor/katex/katex.min.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="topbar-inner">
+    <a class="brand" href="#" id="brand">Final<span>ACT</span></a>
+    <nav class="steps" id="steps" aria-label="Progress"></nav>
+    <div class="topbar-tools">
+      <span class="demo-pill" id="demoPill" hidden>Demo shortcuts on</span>
+      <button class="ghost small" id="progressBtn" type="button">My data</button>
+      <button class="ghost small" id="resetBtn" type="button">Start over</button>
+    </div>
+  </div>
+</header>
+<main id="app" class="wrap" tabindex="-1"></main>
+<div class="confirm" id="confirm" hidden>
+  <div class="confirm-card" role="dialog" aria-modal="true" aria-labelledby="confirmText">
+    <p id="confirmText"></p>
+    <div class="row end">
+      <button class="ghost" id="confirmNo" type="button">Cancel</button>
+      <button class="primary" id="confirmYes" type="button">Yes</button>
+    </div>
+  </div>
+</div>
+<script src="vendor/katex/katex.min.js"></script>
+<script src="items.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
