@@ -211,3 +211,12 @@ pre.data { background: var(--paper); border: 1px solid var(--line); border-radiu
   .flash { animation: flash .5s ease-out; }
   @keyframes flash { from { transform: translateY(4px); opacity: .5; } to { transform: none; opacity: 1; } }
 }
+
+/* Tutor */
+.tutor-box { border-left: 4px solid var(--accent); background: var(--accent-bg); border-radius: 0 10px 10px 0; padding: 10px 14px; display: grid; gap: 4px; }
+.tutor-box .eyebrow { color: var(--accent); }
+.small-note { font-size: .85rem; }
+.tutor-notes li { display: block; }
+.tutor-notes .line { display: inline; }
+.hint .line, .tutor-box .line { display: inline; }
+.solution .display, .hint .display { text-align: left; }
