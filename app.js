@@ -1304,12 +1304,12 @@
       "<h1>Practice finished.</h1>" +
       '<p class="lede">' + bs.filter((b) => b.status === "fixed").length + " of " + bs.length + " question types fixed. Next is a timed test on new questions, the real check of whether the fixes held.</p>" +
       (bs.some((b) => b.status === "not_fixed")
-        ? '<div class="callout warn"><strong>Some types are not fixed yet.</strong><p>They will be checked again on the ' + (S.cycle === 0 ? "post-test, and if you take the second loop they come first in its program." : "final test.") + "</p></div>"
+        ? '<div class="callout warn"><strong>Some types are not fixed yet.</strong><p>' + (S.cycle === 0 ? "These question types will appear first in your second loop. They are also checked again on the post-test." : "They will be checked again on the final test.") + "</p></div>"
         : "") +
       "</section>" +
       '<section class="panel"><h2>Question types</h2><div class="tablewrap"><table><thead><tr><th>Type</th><th>Skill</th><th class="num">Times shown</th><th>Status</th></tr></thead><tbody>' +
       bs.map((b) => '<tr><td class="mono">' + b.id + "</td><td>" + esc(SKILL_SHORT[b.skill]) + '</td><td class="num">' + b.presentations + "</td><td>" +
-        (b.status === "fixed" ? '<span class="pill ok">Fixed</span>' : '<span class="pill bad">Not fixed yet</span>') + "</td></tr>").join("") +
+        (b.status === "fixed" ? '<span class="pill ok">Fixed</span>' : '<span class="pill bad">Not fixed yet</span>' + (S.cycle === 0 ? ' <span class="muted">First in the second loop</span>' : "")) + "</td></tr>").join("") +
       "</tbody></table></div>" +
       '<p class="muted">' + done.length + " questions answered · " + twins.filter((x) => x.outcome === "twin_right").length + " of " + twins.length + " twins right on the first try. Your confidence ratings are saved in My data.</p></section>" +
       '<section class="row end"><button class="primary" id="toNext" type="button">' + nextTestLabel() + "</button></section>";
