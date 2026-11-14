@@ -10,7 +10,7 @@
   const BANK = window.ITEM_BANK;
   const TUTOR = window.FinalACTTutor;
   const SKILLS = BANK.meta.skills;
-  const SKILL_SHORT = { S1: "Linear", S2: "Quadratic & exponential", S3: "Function concepts", S4: "Function families" };
+  const SKILL_SHORT = { S1: "Linear equations", S2: "Quadratics & exponentials", S3: "Function concepts", S4: "Function families" };
   const FORMS = ["A", "B", "C"];
   const TEST_NAME = { A: "Diagnostic", B: "Post-test", C: "Final test" };
   const FORM_MS = 22 * 60 * 1000;
@@ -263,7 +263,7 @@
       '<section class="panel">' +
       "<h2>The four skills</h2>" +
       '<ul class="skills-list">' +
-      Object.keys(SKILLS).map((k) => '<li><span class="tag">' + k + "</span><span>" + esc(SKILLS[k]) + "</span></li>").join("") +
+      Object.keys(SKILLS).map((k) => "<li><span>" + esc(SKILLS[k]) + "</span></li>").join("") +
       "</ul>" +
       '<p class="muted">Five questions per skill, from easier to harder. These are original ACT-style questions, not official ACT items. A skill counts as mastered at 4 of 5 on two tests in a row.</p>' +
       "</section>" +
@@ -608,7 +608,7 @@
         : "";
     return (
       '<article class="panel miss" data-miss="' + r.id + '">' +
-      '<div class="item-head"><span class="qnum">' + r.q + '</span><span class="tag">' + r.skill + '</span><span class="muted">' + esc(SKILL_SHORT[r.skill]) + "</span></div>" +
+      '<div class="item-head"><span class="qnum">' + r.q + '</span><span class="tag">' + esc(SKILL_SHORT[r.skill]) + "</span></div>" +
       '<div class="stem">' + rich(it.stem) + "</div>" +
       '<div class="choices">' +
       it.choices.map((c) => {
@@ -693,7 +693,7 @@
       '<section class="panel"><h2>By skill</h2><div class="tablewrap"><table>' +
       '<thead><tr><th>Skill</th><th>Questions, easier to harder</th><th class="num">Correct</th><th>Status</th></tr></thead><tbody>' +
       skillRowsFor(d).map((s) =>
-        '<tr><td><span class="tag">' + s.skill + "</span> " + esc(SKILLS[s.skill]) + "</td>" +
+        '<tr><td>' + esc(SKILLS[s.skill]) + "</td>" +
         "<td>" + dots(s) + "</td>" +
         '<td class="num">' + s.right + " / 5</td>" +
         "<td>" + (s.right >= MASTERY ? '<span class="pill ok">At target (4 of 5)</span>' : '<span class="pill bad">Below target</span>') + "</td></tr>"
@@ -728,6 +728,20 @@
     return used;
   }
 
+  // Practice question types left "not fixed yet" in earlier cycles (Dylan, Nov 13: they lead the second loop).
+  function carriedOver() {
+    const out = [];
+    S.cycles.forEach((c, i) => {
+      if (i >= S.cycle || !c.practice || !c.plan) return;
+      Object.values(c.practice.bases).forEach((b) => {
+        if (b.status !== "not_fixed") return;
+        const x = c.plan.items.find((y) => y.id === b.id) || {};
+        out.push({ base: b.id, skill: b.skill, template: x.template, difficulty: x.difficulty || 2, from: x.from, from_q: x.from_q, form: c.form, cause: x.cause || "concept" });
+      });
+    });
+    return out;
+  }
+
   // Rule-based program: for each missed question, pick practice items of the same template
   // (same question type), add extra items for concept gaps and misconceptions, then order each skill easier to harder.
   function buildPlan() {
@@ -742,6 +756,19 @@
       used.add(c[0].id);
       return c[0];
     }
+
+    // Question types still "not fixed yet" after earlier practice come first, with a fresh item of the same type.
+    const carry = carriedOver();
+    carry.forEach((c) => {
+      const list = (bySkill[c.skill] = bySkill[c.skill] || []);
+      let p = take((p) => p.skill === c.skill && p.template === c.template);
+      let why = "Not fixed in training (" + c.base + "), same question type";
+      if (!p) {
+        p = take((p) => p.skill === c.skill, (a, b) => Math.abs(a.difficulty - c.difficulty) - Math.abs(b.difficulty - c.difficulty));
+        why = "Not fixed in training (" + c.base + "), same skill";
+      }
+      if (p) list.push({ id: p.id, skill: p.skill, difficulty: p.difficulty, template: p.template, from: c.from, from_q: c.from_q, from_form: c.form, cause: c.cause, carry: true, reason: why });
+    });
 
     misses().forEach((r) => {
       const cause = rv[r.id].cause;
@@ -761,10 +788,11 @@
       }
     });
 
+    const carried = (k) => bySkill[k].filter((x) => x.carry).length;
     const order = Object.keys(bySkill).filter((k) => bySkill[k].length).sort((a, b) => {
       const ma = misses().filter((r) => r.skill === a).length;
       const mb = misses().filter((r) => r.skill === b).length;
-      return mb - ma || a.localeCompare(b);
+      return carried(b) - carried(a) || mb - ma || a.localeCompare(b);
     });
     const skills = order.map((k) => {
       const causes = {};
@@ -772,19 +800,21 @@
         const c = rv[r.id].cause;
         causes[c] = (causes[c] || 0) + 1;
       });
-      const main = Object.keys(causes).sort((a, b) => causes[b] - causes[a])[0];
+      const firstCarry = bySkill[k].find((x) => x.carry);
+      const main = Object.keys(causes).sort((a, b) => causes[b] - causes[a])[0] || (firstCarry && firstCarry.cause) || "concept";
       return {
         skill: k,
         missed: misses().filter((r) => r.skill === k).map((r) => r.q),
         causes: causes,
         coaching: CAUSE_COACHING[main],
-        items: bySkill[k].sort((a, b) => a.difficulty - b.difficulty)
+        carried: bySkill[k].filter((x) => x.carry).map((x) => x.reason.match(/\((.*?)\)/)[1]),
+        items: bySkill[k].sort((a, b) => (b.carry ? 1 : 0) - (a.carry ? 1 : 0) || a.difficulty - b.difficulty)
       };
     });
     const onTarget = Object.keys(SKILLS).filter((k) => !bySkill[k]);
     return {
       createdAt: new Date().toISOString(),
-      rule: "same-template practice per miss; 2 items for concept gap or misconception, 1 for careless slip or time; max 8 per skill; practice items from earlier cycles are not reused; skills ordered by number of misses; items ordered easier to harder",
+      rule: "question types not fixed in earlier practice first; same-template practice per miss; 2 items for concept gap or misconception, 1 for careless slip or time; max 8 per skill; practice items from earlier cycles are not reused; skills ordered by number of misses; items ordered easier to harder",
       skills: skills,
       noMisses: onTarget,
       items: skills.reduce((all, s) => all.concat(s.items), []),
@@ -860,9 +890,9 @@
         : "") +
       p.skills.map((s, i) =>
         '<section class="panel plan-skill">' +
-        '<div class="row between"><h2><span class="muted">' + (i + 1) + ".</span> " + esc(SKILLS[s.skill]) + '</h2><span class="tag">' + s.skill + "</span></div>" +
+        '<div class="row between"><h2><span class="muted">' + (i + 1) + ".</span> " + esc(SKILLS[s.skill]) + "</h2></div>" +
         '<div class="row">' +
-        '<span class="muted">Missed: ' + s.missed.map((q) => "#" + q).join(", ") + "</span>" +
+        '<span class="muted">' + [s.missed.length ? "Missed: " + s.missed.map((q) => "#" + q).join(", ") : "", s.carried && s.carried.length ? "Not fixed in training: " + s.carried.join(", ") : ""].filter(Boolean).join(" · ") + "</span>" +
         Object.keys(s.causes).map((c) => '<span class="pill info">' + CAUSES[c].label + (s.causes[c] > 1 ? " ×" + s.causes[c] : "") + "</span>").join("") +
         "</div>" +
         "<p>" + esc(s.coaching) + "</p>" +
@@ -876,7 +906,7 @@
         ? '<section class="panel"><h2>No practice assigned</h2><p>' + p.noMisses.map((k) => esc(SKILLS[k])).join("; ") + ": no misses, so these will be checked again on the next test.</p></section>"
         : "") +
       '<section class="panel"><h2>How practice works</h2><div class="rules">' +
-      rule("Rate, then answer", "Before you check each answer, say how sure you are. There is no clock.") +
+      rule("Answer, then rate", "Pick an answer, then say how sure you are before you check it. There is no clock.") +
       rule("Hints after a miss", "A wrong first try opens three hints, one at a time: a question to point you, the idea, then the first step.") +
       rule("Two misses locks it", "After a second wrong choice the choices lock. Explain why you picked them, then see the tutor's response and the worked solution.") +
       rule("Twins check the fix", "Get one right and a twin with new numbers follows. It counts only if you get it on the first try. A miss sends the question type to the back of the line.") +
@@ -929,7 +959,8 @@
     const id = b.versions[b.next++];
     b.presentations += 1;
     pendingChoice = null;
-    return { base: base, id: id, kind: kind, conf: null, attempts: [], hints: 0, explanation: "", revealed: false, outcome: null, shownAt: Date.now(), tutor: { hints: {}, explain: null } };
+    pendingConf = null;
+    return { base: base, id: id, kind: kind, conf: null, confs: [], attempts: [], hints: 0, explanation: "", revealed: false, outcome: null, shownAt: Date.now(), tutor: { hints: {}, explain: null } };
   }
 
   function nextEntry() {
@@ -975,12 +1006,16 @@
     const e = pr.cur;
     const it = byId[e.id];
     const label = pendingChoice;
-    if (!label || e.conf == null || e.outcome) return;
+    const conf = pendingConf;
+    if (!label || conf == null || e.outcome) return;
     pendingChoice = null;
+    pendingConf = null;
     e.attempts.push(label);
+    e.confs.push(conf);
+    if (e.conf == null) e.conf = conf;
     const right = label === it.answer;
     const pick = choiceOf(it, label);
-    log("practice_attempt", { item: e.id, base: e.base, kind: e.kind, attempt: e.attempts.length, choice: label, correct: right, confidence: e.conf, hints_used: e.hints, misconception_tag: pick.misconception });
+    log("practice_attempt", { item: e.id, base: e.base, kind: e.kind, attempt: e.attempts.length, choice: label, correct: right, confidence: conf, hints_used: e.hints, misconception_tag: pick.misconception });
     if (right) {
       if (e.kind === "twin") {
         if (e.attempts.length === 1 && e.hints === 0) {
@@ -1096,6 +1131,7 @@
   }
 
   let pendingChoice = null;
+  let pendingConf = null;
   let quiet = false; // demo autoplay: no tutor calls
   const tutorOn = () => TUTOR.enabled() && !quiet;
 
@@ -1162,23 +1198,23 @@
       (TUTOR.enabled() ? '<span class="pill info">AI tutor on</span>' : '<span class="pill warn">AI tutor off</span>') + "</div></div>" +
       '<div class="progressline"><i style="width:' + Math.round((100 * closed) / Math.max(1, bs.length)) + '%"></i></div>' +
       '<article class="panel item">' +
-      '<div class="item-head"><span class="tag">' + it.skill + '</span><span class="muted">' + esc(SKILL_SHORT[it.skill]) + '</span><span class="pill ' + (e.kind === "twin" ? "warn" : "info") + '">' + kindLabel + "</span>" +
+      '<div class="item-head"><span class="tag">' + esc(SKILL_SHORT[it.skill]) + '</span><span class="pill ' + (e.kind === "twin" ? "warn" : "info") + '">' + kindLabel + "</span>" +
       '<span class="muted mono">From #' + b.from_q + " on Form " + cyc().form + "</span></div>" +
       '<div class="stem">' + rich(it.stem) + "</div>" +
-      (canAnswer && tries === 0 ? confHtml(e) : "") +
       '<div class="choices" role="radiogroup">' +
       it.choices.map((c) => {
         const tried = e.attempts.includes(c.label);
         const isRight = c.label === it.answer && (right || e.revealed);
         const sel = pendingChoice === c.label;
         const cls = ["choice", tried && !isRight ? "wrongpick out" : "", isRight ? "right" : "", sel ? "sel" : ""].join(" ");
-        const dis = !canAnswer || tried || e.conf == null;
+        const dis = !canAnswer || tried;
         return '<button type="button" role="radio" aria-checked="' + sel + '" class="' + cls + '" data-choice="' + c.label + '"' + (dis ? " disabled" : "") + ">" +
           '<span class="bubble">' + c.label + '</span><span class="choice-body">' + tex(c.text) + "</span>" +
           (tried && !isRight ? '<span class="pill bad">Tried</span>' : "") + "</button>";
       }).join("") +
       "</div>" +
-      (canAnswer ? '<div class="row between"><span class="muted">' + (e.conf == null ? "Rate your confidence to unlock the choices." : tries === 1 ? "Second try. A wrong choice locks the question." : "Pick an answer, then check it.") + "</span>" +
+      (canAnswer && pendingChoice ? confHtml(pendingChoice) : "") +
+      (canAnswer ? '<div class="row between"><span class="muted">' + (!pendingChoice ? (tries === 1 ? "Second try. A wrong choice locks the question." : "Pick an answer.") : pendingConf == null ? "Rate how sure you are to check your answer." : "Check your answer when you're ready.") + "</span>" +
         '<button class="primary" id="checkBtn" type="button" disabled>Check answer</button></div>' : "") +
       feedback +
       hintsHtml +
@@ -1188,19 +1224,20 @@
 
     app.querySelectorAll("[data-conf]").forEach((x) => {
       x.onclick = () => {
-        e.conf = +x.dataset.conf;
-        log("practice_confidence", { item: e.id, base: e.base, kind: e.kind, confidence: e.conf });
+        pendingConf = +x.dataset.conf;
+        log("practice_confidence", { item: e.id, base: e.base, kind: e.kind, attempt: e.attempts.length + 1, choice: pendingChoice, confidence: pendingConf });
         renderPractice();
       };
     });
     app.querySelectorAll("[data-choice]").forEach((x) => {
       x.onclick = () => {
+        if (pendingChoice !== x.dataset.choice) pendingConf = null; // the rating is about this answer
         pendingChoice = x.dataset.choice;
         renderPractice();
       };
     });
     if ($("#checkBtn")) {
-      $("#checkBtn").disabled = !pendingChoice || e.conf == null;
+      $("#checkBtn").disabled = !pendingChoice || pendingConf == null;
       $("#checkBtn").onclick = practiceCheck;
     }
     if ($("#hintBtn")) $("#hintBtn").onclick = practiceHint;
@@ -1226,9 +1263,9 @@
     }
   }
 
-  function confHtml(e) {
-    return '<div class="conf"><strong>How sure are you that you can get this right?</strong><div class="conf-scale" role="group" aria-label="Confidence">' +
-      CONF.map((c) => '<button type="button" data-conf="' + c[0] + '" aria-pressed="' + (e.conf === c[0]) + '" class="' + (e.conf === c[0] ? "sel" : "") + '"><b>' + c[0] + "</b><span>" + c[1] + "</span></button>").join("") +
+  function confHtml(label) {
+    return '<div class="conf"><strong>How sure are you that ' + label + ' is right?</strong><div class="conf-scale" role="group" aria-label="Confidence">' +
+      CONF.map((c) => '<button type="button" data-conf="' + c[0] + '" aria-pressed="' + (pendingConf === c[0]) + '" class="' + (pendingConf === c[0] ? "sel" : "") + '"><b>' + c[0] + "</b><span>" + c[1] + "</span></button>").join("") +
       "</div></div>";
   }
 
@@ -1241,9 +1278,9 @@
       const e = cyc().practice.cur;
       const it = byId[e.id];
       if (!e.outcome) {
-        if (e.conf == null) e.conf = 1 + Math.floor(r() * 4);
         const wrongs = it.choices.filter((c) => !c.correct && !e.attempts.includes(c.label));
         pendingChoice = r() < 0.7 ? it.answer : wrongs[0].label;
+        pendingConf = 1 + Math.floor(r() * 4);
         practiceCheck();
         if (!e.outcome && e.attempts.length >= 2) {
           e.explanation = "Demo student: I set it up the way I remembered and picked what came out.";
@@ -1265,10 +1302,14 @@
     app.innerHTML =
       '<section class="stack"><p class="eyebrow">' + (S.cycle === 0 ? "Training" : "Second loop") + " · Done</p>" +
       "<h1>Practice finished.</h1>" +
-      '<p class="lede">' + bs.filter((b) => b.status === "fixed").length + " of " + bs.length + " question types fixed. Next is a timed test on new questions, the real check of whether the fixes held.</p></section>" +
+      '<p class="lede">' + bs.filter((b) => b.status === "fixed").length + " of " + bs.length + " question types fixed. Next is a timed test on new questions, the real check of whether the fixes held.</p>" +
+      (bs.some((b) => b.status === "not_fixed")
+        ? '<div class="callout warn"><strong>Some types are not fixed yet.</strong><p>' + (S.cycle === 0 ? "These question types will appear first in your second loop. They are also checked again on the post-test." : "They will be checked again on the final test.") + "</p></div>"
+        : "") +
+      "</section>" +
       '<section class="panel"><h2>Question types</h2><div class="tablewrap"><table><thead><tr><th>Type</th><th>Skill</th><th class="num">Times shown</th><th>Status</th></tr></thead><tbody>' +
-      bs.map((b) => '<tr><td class="mono">' + b.id + "</td><td>" + b.skill + '</td><td class="num">' + b.presentations + "</td><td>" +
-        (b.status === "fixed" ? '<span class="pill ok">Fixed</span>' : '<span class="pill bad">Not fixed yet</span>') + "</td></tr>").join("") +
+      bs.map((b) => '<tr><td class="mono">' + b.id + "</td><td>" + esc(SKILL_SHORT[b.skill]) + '</td><td class="num">' + b.presentations + "</td><td>" +
+        (b.status === "fixed" ? '<span class="pill ok">Fixed</span>' : '<span class="pill bad">Not fixed yet</span>' + (S.cycle === 0 ? ' <span class="muted">First in the second loop</span>' : "")) + "</td></tr>").join("") +
       "</tbody></table></div>" +
       '<p class="muted">' + done.length + " questions answered · " + twins.filter((x) => x.outcome === "twin_right").length + " of " + twins.length + " twins right on the first try. Your confidence ratings are saved in My data.</p></section>" +
       '<section class="row end"><button class="primary" id="toNext" type="button">' + nextTestLabel() + "</button></section>";
@@ -1317,13 +1358,14 @@
       forms.slice(0, -1).map((c) => " · Form " + c.form + ": " + c.diag.results.filter((r) => r.correct).length + " of 20").join("") + "</span></div></section>" +
       '<section class="panel"><h2>Mastery by skill</h2><div class="tablewrap"><table><thead><tr><th>Skill</th>' +
       forms.map((c) => '<th class="num">Form ' + c.form + "</th>").join("") + "<th>Status</th></tr></thead><tbody>" +
-      rows.map((r) => '<tr><td><span class="tag">' + r.skill + "</span> " + esc(SKILLS[r.skill]) + "</td>" +
+      rows.map((r) => '<tr><td>' + esc(SKILLS[r.skill]) + "</td>" +
         r.scores.map((s) => '<td class="num">' + s + " / 5</td>").join("") +
         "<td>" + (r.mastered ? '<span class="pill ok">Mastered</span>' : r.scores[r.scores.length - 1] >= MASTERY ? '<span class="pill info">At target once</span>' : '<span class="pill bad">Not yet</span>') + "</td></tr>").join("") +
       "</tbody></table></div>" +
       '<p class="muted">A skill is mastered at 4 of 5 or better on two tests in a row.</p></section>' +
       (canLoop && !choice
         ? '<section class="panel"><h2>Want a second loop?</h2><p>You would review your misses on this test, get a follow-up program for the skills not yet mastered, then take a final 22-minute test (Form C). This is optional.</p>' +
+          (carriedOver().length ? "<p>The program starts with the question types not fixed in training: " + carriedOver().map((c) => esc(SKILL_SHORT[c.skill]) + " (" + c.base + ")").join(", ") + ".</p>" : "") +
           '<div class="row end"><button class="ghost" id="endBtn" type="button">Finish here</button><button class="primary" id="loopBtn" type="button">Start the second loop</button></div></section>'
         : '<section class="panel"><h2>' + (allMastered ? "All four skills mastered." : "You're done for this cycle.") + "</h2><p>" +
           (allMastered ? "Review these skills again in a few days to keep them fresh." : "Keep practicing the skills marked not yet, and review mastered skills in a few days.") +
@@ -1371,7 +1413,7 @@
           ? {
               bases: c.practice.bases,
               presentations: c.practice.done.concat(c.practice.cur ? [c.practice.cur] : []).map((e) => ({
-                item: e.id, base: e.base, kind: e.kind, confidence: e.conf, attempts: e.attempts, hints: e.hints, explanation: e.explanation || null, outcome: e.outcome
+                item: e.id, base: e.base, kind: e.kind, confidence: e.confs || [e.conf], attempts: e.attempts, hints: e.hints, explanation: e.explanation || null, outcome: e.outcome
               }))
             }
           : null,
@@ -1398,15 +1440,15 @@
       S.cycles.filter((c) => c.diag && c.diag.results).map((c) =>
         '<section class="panel"><h2>' + TEST_NAME[c.form] + " · Form " + c.form + '</h2><div class="tablewrap"><table><thead><tr><th class="num">#</th><th>Skill</th><th>Answer</th><th class="num">Time on item</th><th>Timer flag</th><th>Cause given</th></tr></thead><tbody>' +
         c.diag.results.map((r) =>
-          '<tr><td class="num">' + r.q + "</td><td>" + r.skill + "</td><td>" + (r.choice || "–") + " " + (r.correct ? '<span class="pill ok">right</span>' : '<span class="pill bad">missed</span>') + "</td>" +
+          '<tr><td class="num">' + r.q + "</td><td>" + esc(SKILL_SHORT[r.skill]) + "</td><td>" + (r.choice || "–") + " " + (r.correct ? '<span class="pill ok">right</span>' : '<span class="pill bad">missed</span>') + "</td>" +
           '<td class="num">' + fmtSec(r.active_ms) + "</td><td>" + (r.time_flag ? '<span class="pill warn">' + r.time_flag.replace(/_/g, " ") + "</span>" : "") + "</td>" +
           "<td>" + (c.review[r.id] && c.review[r.id].cause ? CAUSES[c.review[r.id].cause].label : "") + "</td></tr>"
         ).join("") +
         "</tbody></table></div></section>"
       ).join("") +
       (conf.length
-        ? '<section class="panel"><h2>Practice confidence ratings</h2><div class="tablewrap"><table><thead><tr><th>Form</th><th>Question</th><th>Kind</th><th class="num">Confidence</th><th>First try</th><th class="num">Hints</th><th>Outcome</th></tr></thead><tbody>' +
-          conf.map((x) => "<tr><td>" + x.form + '</td><td class="mono">' + x.e.id + "</td><td>" + x.e.kind + '</td><td class="num">' + x.e.conf + "</td><td>" +
+        ? '<section class="panel"><h2>Practice confidence ratings</h2><div class="tablewrap"><table><thead><tr><th>Form</th><th>Question</th><th>Kind</th><th class="num">Confidence (each try)</th><th>First try</th><th class="num">Hints</th><th>Outcome</th></tr></thead><tbody>' +
+          conf.map((x) => "<tr><td>" + x.form + '</td><td class="mono">' + x.e.id + "</td><td>" + x.e.kind + '</td><td class="num">' + (x.e.confs || [x.e.conf]).join(" → ") + "</td><td>" +
             (x.e.attempts.length ? (x.right ? '<span class="pill ok">right</span>' : '<span class="pill bad">wrong</span>') : "–") + '</td><td class="num">' + x.e.hints + "</td><td>" + (x.e.outcome || "in progress").replace(/_/g, " ") + "</td></tr>").join("") +
           "</tbody></table></div></section>"
         : "") +
@@ -1455,6 +1497,7 @@
     closeItemClock();
     shownAt = null;
     pendingChoice = null;
+    pendingConf = null;
     S = fresh();
     S.demo = demo;
     save();
