@@ -218,5 +218,16 @@ pre.data { background: var(--paper); border: 1px solid var(--line); border-radiu
 .small-note { font-size: .85rem; }
 .tutor-notes li { display: block; }
 .tutor-notes .line { display: inline; }
+.cause-summary { font-size: 1.02rem; }
+.cause-notes { list-style: none; margin: 0; padding: 0; display: grid; }
+.cause-note { padding: 14px 0; border-top: 1px solid var(--line); display: grid; gap: 6px; }
+.cause-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.cause-num { font-family: var(--mono); font-weight: 600; min-width: 2.6em; }
+.cause-said { color: var(--ink); }
+.cause-body { padding-left: calc(2.6em + 10px); }
+.cause-answer { color: var(--muted); font-size: .92rem; }
+.cause-answer summary { cursor: pointer; color: var(--accent); width: fit-content; }
+.cause-answer p { margin-top: 6px; padding: 6px 12px; border-left: 3px solid var(--line); }
+@media (max-width: 520px) { .cause-body { padding-left: 0; } }
 .hint .line, .tutor-box .line { display: inline; }
 .solution .display, .hint .display { text-align: left; }

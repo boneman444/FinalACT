@@ -41,7 +41,10 @@ const TASKS = {
   cause_check:
     "On a timed test the student missed this question, explained their choice, and picked a cause (concept gap, misconception, careless slip, or ran out of time). " +
     "Address the student as \"you\" (for example \"Your explanation...\" or \"You picked...\"), never as \"the student\". " +
-    "In one or two sentences, say whether their explanation and the misconception tag on the choice they picked fit that cause, and if not, which cause fits better and why. " +
+    "Reply in exactly this format. Line 1 is a verdict line, the only exception to the plain-text rule: \"VERDICT: fits\" if their explanation and the choice they picked support the cause they chose, " +
+    "otherwise \"VERDICT: \" followed by the one cause that fits better, written as concept gap, misconception, careless slip, or ran out of time. " +
+    "Then a blank line, then at most three short sentences, about 60 words in all: why the cause fits or what points to the better one; the exact step where the reasoning went wrong; and one thing to check or watch for next time. " +
+    "The screen already shows the cause they picked, your verdict, and their choice, so do not repeat those. Never use the word \"tag\". " +
     "NEVER state the correct choice's letter or its value; the student has not seen the answer."
 };
 
