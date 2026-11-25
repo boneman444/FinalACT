@@ -124,6 +124,44 @@
   const $ = (sel, root) => (root || document).querySelector(sel);
   const app = $("#app");
 
+  // Screens are re-rendered with innerHTML, so feedback that appears in place isn't announced by screen readers.
+  // A persistent live region outside #app carries those updates (UDL: perception; WCAG 4.1.3 status messages).
+  function announce(text) {
+    const el = $("#announce");
+    if (!el || !text) return;
+    el.textContent = "";
+    setTimeout(() => (el.textContent = String(text).replace(/\s+/g, " ").trim()), 60);
+  }
+  // KaTeX renders math twice (visual HTML plus MathML with a TeX annotation); keep only the MathML text once.
+  function plainText(el) {
+    if (!el) return "";
+    const c = el.cloneNode(true);
+    c.querySelectorAll(".katex-html, annotation").forEach((x) => x.remove());
+    c.querySelectorAll("strong, p, li, div").forEach((x) => x.append(" "));
+    return c.textContent;
+  }
+  const lastHintText = () => {
+    const all = app.querySelectorAll(".hint > div");
+    return all.length ? plainText(all[all.length - 1]) : "";
+  };
+  const textOf = (sel) => plainText($(sel, app));
+
+  // Arrow keys move between answer choices in a radiogroup, as screen-reader users expect.
+  app.addEventListener("keydown", (ev) => {
+    const cur = ev.target.closest && ev.target.closest('[role="radio"]');
+    if (!cur || !["ArrowDown", "ArrowRight", "ArrowUp", "ArrowLeft"].includes(ev.key)) return;
+    const group = cur.closest('[role="radiogroup"]');
+    const opts = Array.from(group.querySelectorAll('[role="radio"]:not(:disabled)'));
+    if (opts.length < 2) return;
+    ev.preventDefault();
+    const step = ev.key === "ArrowDown" || ev.key === "ArrowRight" ? 1 : -1;
+    const next = opts[(opts.indexOf(cur) + step + opts.length) % opts.length];
+    const label = next.dataset.choice;
+    next.click();
+    const again = app.querySelector('[role="radio"][data-choice="' + label + '"]');
+    if (again) again.focus();
+  });
+
   function esc(s) {
     return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   }
@@ -222,7 +260,7 @@
     const idx = steps.findIndex((s) => s[0] === stepKey());
     $("#steps").innerHTML = steps.map((s, i) => {
       const cls = i < idx ? "done" : i === idx ? "now" : "";
-      return '<span class="' + cls + '">' + s[1] + "</span>";
+      return '<span class="' + cls + '"' + (i === idx ? ' aria-current="step"' : "") + ">" + (i < idx ? '<span aria-hidden="true">✓ </span><span class="sr-only">Done: </span>' : "") + s[1] + "</span>";
     }).join("");
     $("#demoPill").hidden = !S.demo;
     $("#progressBtn").textContent = S.viewData ? "Back" : "My data";
@@ -268,6 +306,15 @@
       '<p class="muted">Five questions per skill, from easier to harder. These are original ACT-style questions, not official ACT items. A skill counts as mastered at 4 of 5 on two tests in a row.</p>' +
       "</section>" +
       '<section class="panel">' +
+      "<h2>What FinalACT records, and why</h2>" +
+      '<ul class="records">' +
+      "<li><b>Your answers and the time you spend on each question.</b> Time shows whether a miss came from running out of time or from the math.</li>" +
+      "<li><b>What you write when you explain a miss, and the cause you pick.</b> The training program and the AI tutor use it to aim at what actually went wrong.</li>" +
+      "<li><b>How sure you are, and which hints you open, during training.</b> This shows whether your confidence matches your results and how much help each question type needed.</li>" +
+      "</ul>" +
+      '<p class="muted">All of it stays in this browser. The only thing that leaves it is a tutor request, which carries the question and what you wrote about it, never your name. You can see or download everything under <a href="#" id="startDataLink">My data</a>, and Start over erases it.</p>' +
+      "</section>" +
+      '<section class="panel">' +
       '<label class="check"><input type="checkbox" id="demoToggle"' + (S.demo ? " checked" : "") + "> Show demo shortcuts (for recording and reviewers)</label>" +
       '<div class="row"><button class="primary" id="beginBtn" type="button">Start the 22-minute diagnostic</button>' +
       '<span class="muted">Find a quiet spot. The clock keeps running if you close the tab.</span></div>' +
@@ -278,6 +325,10 @@
       renderChrome();
     };
     $("#beginBtn").onclick = startTest;
+    $("#startDataLink").onclick = (ev) => {
+      ev.preventDefault();
+      $("#progressBtn").click();
+    };
   }
 
   function rule(title, body) {
@@ -335,6 +386,7 @@
   });
 
   let ticker = null;
+  let warned = null;
   function stopTicker() {
     if (ticker) clearInterval(ticker);
     ticker = null;
@@ -359,6 +411,7 @@
     }
     const answered = items.filter((x) => d.answers[x.id].choice).length;
     app.innerHTML =
+      '<h1 class="sr-only">' + TEST_NAME[cyc().form] + ", question " + (d.cur + 1) + " of 20</h1>" +
       '<div class="testbar">' +
       '<div><p class="eyebrow">' + TEST_NAME[cyc().form] + " · Form " + cyc().form + '</p><p class="muted">' + answered + " of 20 answered</p></div>" +
       '<div class="row">' +
@@ -406,6 +459,13 @@
       const left = d.deadline - Date.now();
       t.textContent = fmtClock(left);
       t.classList.toggle("low", left <= 2 * 60 * 1000);
+      // The clock turns red at 2 minutes; say it in words too, once each at 5 and 2 minutes.
+      [5, 2].forEach((m) => {
+        if (left <= m * 60 * 1000 && left > (m - 1) * 60 * 1000 && warned !== m) {
+          warned = m;
+          announce(m + " minutes left.");
+        }
+      });
       checkDeadline();
     }, 250);
   }
@@ -687,7 +747,7 @@
     log("score_view", { correct: right, pct: pct });
 
     app.innerHTML =
-      '<section class="stack"><p class="eyebrow">Step 3 · Your diagnostic score</p>' +
+      '<section class="stack"><p class="eyebrow">Step 3 · Your diagnostic score</p><h1 class="sr-only">Your diagnostic score: ' + right + ' of 20 correct</h1>' +
       '<div class="row" style="gap:24px;align-items:flex-end"><span class="big">' + pct + '%</span><span class="lede">' + right + " of 20 correct · " + fmtClock(usedMs) + " used of 22:00</span></div>" +
       '<p class="muted">The correct answers stay hidden. You will work through these skills in your training program.</p></section>' +
       '<section class="panel"><h2>By skill</h2><div class="tablewrap"><table>' +
@@ -1033,6 +1093,11 @@
     }
   }
 
+  // True once the student has met a lock in any cycle, so the why-it-locks line shows only before the first one.
+  function hadLock() {
+    return S.events.some((ev) => ev.type === "practice_lock");
+  }
+
   function summary() {
     const bs = Object.values(cyc().practice.bases);
     return { fixed: bs.filter((b) => b.status === "fixed").length, not_fixed: bs.filter((b) => b.status === "not_fixed").length, open: bs.filter((b) => b.status === "open").length };
@@ -1077,6 +1142,7 @@
     }
     save();
     renderPractice();
+    announce(textOf(".callout") || textOf(".lockbox strong"));
   }
 
   function practiceReveal() {
@@ -1091,6 +1157,7 @@
     e.tutor.explain = { text: fallbackExplain(it, e), source: "written", pending: tutorOn() };
     save();
     renderPractice();
+    announce("The worked solution is below. " + (tutorOn() ? "The tutor is reading your explanation." : ""));
     if (!tutorOn()) return;
     TUTOR.ask("explain", {
       item: TUTOR.itemContext(it),
@@ -1101,7 +1168,10 @@
       log(res.ok ? "tutor_reply" : "tutor_fallback", { task: "explain", item: e.id, reason: res.reason || null, ms: res.ms });
       e.tutor.explain = res.ok ? { text: res.text, source: "tutor" } : Object.assign(e.tutor.explain, { pending: false });
       save();
-      if (cyc().practice.cur === e && S.stage === "practice" && !S.viewData) renderPractice();
+      if (cyc().practice.cur === e && S.stage === "practice" && !S.viewData) {
+        renderPractice();
+        if (res.ok) announce("Tutor: " + textOf(".tutor-box > div"));
+      }
     });
   }
 
@@ -1131,6 +1201,7 @@
     e.tutor.hints[level] = { text: it.hints[level - 1], source: "written", pending: tutorOn() };
     save();
     renderPractice();
+    announce("Hint " + level + " of 3. " + lastHintText());
     if (!tutorOn()) return;
     const wrong = choiceOf(it, e.attempts[0]);
     TUTOR.ask("hint", {
@@ -1144,7 +1215,10 @@
       log(res.ok ? "tutor_reply" : "tutor_fallback", { task: "hint", item: e.id, level: level, reason: res.reason || null, ms: res.ms });
       e.tutor.hints[level] = res.ok ? { text: res.text, source: "tutor" } : Object.assign(e.tutor.hints[level], { pending: false });
       save();
-      if (cyc().practice.cur === e && S.stage === "practice" && !S.viewData) renderPractice();
+      if (cyc().practice.cur === e && S.stage === "practice" && !S.viewData) {
+        renderPractice();
+        if (res.ok) announce("The tutor tailored hint " + level + ". " + lastHintText());
+      }
     });
   }
 
@@ -1197,7 +1271,9 @@
       feedback = '<div class="callout warn"><strong>Right, but not on the first try.</strong><p>A twin only counts on the first try, so this question type goes to the back of the line' + (b.status === "not_fixed" ? ". No new versions are left, so it's marked not fixed yet." : " and comes back with new numbers.") + "</p></div>";
     } else if (tries === 1 && !right) {
       feedback = '<div class="callout bad"><strong>Not quite.</strong><p>' + (e.kind === "twin" ? "Twins count on the first try, so this type will come back later. " : "") +
-        "Open a hint if you want one, then try again. A second wrong choice locks the question.</p></div>";
+        "Open a hint if you want one, then try again. A second wrong choice locks the question." +
+        (hadLock() ? "" : " Then you explain your thinking before you see the solution, because finding where your own steps went wrong is what makes the fix stick.") +
+        "</p></div>";
     }
 
     const hintsHtml = tries >= 1 && !right
@@ -1234,6 +1310,7 @@
       '<div class="row">' + (S.demo ? '<button class="demo small" id="autoBtn" type="button">Demo: finish practice</button>' : "") +
       (TUTOR.enabled() ? '<span class="pill info">AI tutor on</span>' : '<span class="pill warn">AI tutor off</span>') + "</div></div>" +
       '<div class="progressline"><i style="width:' + Math.round((100 * closed) / Math.max(1, bs.length)) + '%"></i></div>' +
+      '<h1 class="sr-only">' + (S.cycle === 0 ? "Training" : "Second loop") + ": " + esc(SKILL_SHORT[it.skill]) + "</h1>" +
       '<article class="panel item">' +
       '<div class="item-head"><span class="tag">' + esc(SKILL_SHORT[it.skill]) + '</span><span class="pill ' + (e.kind === "twin" ? "warn" : "info") + '">' + kindLabel + "</span>" +
       '<span class="muted mono">From #' + b.from_q + " on Form " + cyc().form + "</span></div>" +
@@ -1247,7 +1324,7 @@
         const dis = !canAnswer || tried;
         return '<button type="button" role="radio" aria-checked="' + sel + '" class="' + cls + '" data-choice="' + c.label + '"' + (dis ? " disabled" : "") + ">" +
           '<span class="bubble">' + c.label + '</span><span class="choice-body">' + tex(c.text) + "</span>" +
-          (tried && !isRight ? '<span class="pill bad">Tried</span>' : "") + "</button>";
+          (tried && !isRight ? '<span class="pill bad">✗ Tried</span>' : "") + (isRight ? '<span class="pill ok">✓ Correct</span>' : "") + "</button>";
       }).join("") +
       "</div>" +
       (canAnswer && pendingChoice ? confHtml(pendingChoice) : "") +
