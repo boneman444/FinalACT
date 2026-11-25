@@ -11,7 +11,7 @@
 
   // Set this to the Worker's URL once the relay is deployed, e.g. "https://finalact-tutor.<you>.workers.dev".
   // Until then the tutor is off and every hint and message comes from the item bank.
-  const RELAY_URL = "";
+  const RELAY_URL = "https://finalact-tutor.dylanmichaelbona.workers.dev";
   const OVERRIDE_KEY = "finalact.tutorUrl"; // for testing: localStorage.setItem("finalact.tutorUrl", "<url>")
   const TIMEOUT_MS = 8000;
 
