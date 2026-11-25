@@ -40,6 +40,7 @@ const TASKS = {
     "You may refer to the correct answer.",
   cause_check:
     "On a timed test the student missed this question, explained their choice, and picked a cause (concept gap, misconception, careless slip, or ran out of time). " +
+    "Address the student as \"you\" (for example \"Your explanation...\" or \"You picked...\"), never as \"the student\". " +
     "In one or two sentences, say whether their explanation and the misconception tag on the choice they picked fit that cause, and if not, which cause fits better and why. " +
     "NEVER state the correct choice's letter or its value; the student has not seen the answer."
 };
