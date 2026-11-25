@@ -839,6 +839,19 @@
     return "Your answer matches a common mistake: " + tag + ".";
   }
 
+  // The tutor's cause check starts with "VERDICT: fits" or "VERDICT: <better cause>" (see worker/tutor-worker.js).
+  // Returns { verdict: "fits" | cause key | null, text }. A reply without a readable verdict keeps its text and gets no badge.
+  function parseCauseCheck(raw, chosen) {
+    const m = String(raw).match(/^\s*\**\s*VERDICT\s*:\s*([^\n*]+?)\s*\**\s*(?:\n|$)/i);
+    if (!m) return { verdict: null, text: String(raw).trim() };
+    const v = m[1].toLowerCase().replace(/[.\s]+$/, "");
+    const text = String(raw).slice(m[0].length).trim();
+    if (/^fits?\b/.test(v)) return { verdict: "fits", text: text };
+    const key = Object.keys(CAUSES).find((k) => CAUSES[k].label.toLowerCase() === v || (k === "time" && /time/.test(v)) || (k === "careless" && /careless|slip/.test(v)));
+    if (!key) return { verdict: null, text: text };
+    return { verdict: key === chosen ? "fits" : key, text: text };
+  }
+
   function loadCauseNotes() {
     const p = cyc().plan;
     misses().forEach((r) => {
@@ -856,22 +869,44 @@
         chosen_cause: CAUSES[entry.cause].label,
         time_flag: r.time_flag
       }, it, true).then((res) => {
-        log(res.ok ? "tutor_reply" : "tutor_fallback", { task: "cause_check", item: r.id, reason: res.reason || null, ms: res.ms });
-        if (!res.ok) return;
-        p.notes[key] = { text: res.text, source: "tutor" };
+        const parsed = res.ok ? parseCauseCheck(res.text, entry.cause) : null;
+        log(res.ok ? "tutor_reply" : "tutor_fallback", { task: "cause_check", item: r.id, reason: res.reason || null, ms: res.ms, verdict: parsed ? parsed.verdict : null });
+        if (!res.ok || !parsed.text) return;
+        p.notes[key] = { text: parsed.text, source: "tutor", verdict: parsed.verdict };
         save();
         const el = $('[data-note="' + key + '"]');
         if (el) el.outerHTML = noteHtml(r);
+        const sum = $("#causeSummary");
+        if (sum) sum.outerHTML = causeSummaryHtml();
       });
     });
     save();
   }
 
+  // Layout (Module 3, Mayer): verdict badge first (signaling), a few sentences only (coherence),
+  // the student's own answer one click away beside the feedback (spatial contiguity, learner-paced segmenting).
   function noteHtml(r) {
-    const n = cyc().plan.notes[r.id];
-    if (!n || !n.text) return '<li data-note="' + r.id + '"><b>#' + r.q + '</b> <span class="muted">' + CAUSES[cyc().review[r.id].cause].label + "</span></li>";
-    return '<li data-note="' + r.id + '"><b>#' + r.q + '</b> <span class="muted">' + CAUSES[cyc().review[r.id].cause].label + ".</span> " + rich(n.text) +
-      (n.source === "tutor" ? ' <span class="pill info">Tutor</span>' : "") + "</li>";
+    const n = cyc().plan.notes[r.id] || {};
+    const entry = cyc().review[r.id];
+    const badge = n.verdict === "fits"
+      ? '<span class="pill ok">✓ Fits</span>'
+      : n.verdict && CAUSES[n.verdict] ? '<span class="pill warn">Better fit: ' + CAUSES[n.verdict].label + "</span>" : "";
+    const said = r.choice ? "Chose <b>" + esc(r.choice) + "</b>." : "Left blank.";
+    const why = entry.explanation && entry.explanation.trim() ? " “" + esc(entry.explanation.trim()) + "”" : ' <span class="muted">No explanation written.</span>';
+    return '<li class="cause-note" data-note="' + r.id + '">' +
+      '<div class="cause-head"><span class="cause-num">#' + r.q + '</span><span class="muted">You said <b class="cause-said">' + CAUSES[entry.cause].label + "</b></span>" + badge + "</div>" +
+      (n.text ? '<div class="cause-body">' + rich(n.text) + "</div>" : "") +
+      '<details class="cause-body cause-answer"><summary>Your answer</summary><p>' + said + why + "</p></details>" +
+      "</li>";
+  }
+
+  function causeSummaryHtml() {
+    const judged = misses().map((r) => cyc().plan.notes[r.id] || {}).filter((n) => n.verdict);
+    if (!judged.length) return '<p id="causeSummary" hidden></p>';
+    const fit = judged.filter((n) => n.verdict === "fits").length;
+    const other = judged.length - fit;
+    return '<p id="causeSummary" class="cause-summary"><b>' + fit + " of " + judged.length + "</b> " + (judged.length === 1 ? "cause fits" : "causes fit") + " what you described." +
+      (other ? " <b>" + other + "</b> might be something else." : "") + "</p>";
   }
 
   function renderPlan() {
@@ -886,7 +921,9 @@
       tutorBadge() +
       "</section>" +
       (misses().length
-        ? '<section class="panel"><h2>A second look at your causes</h2><ul class="plan-items tutor-notes">' + misses().map(noteHtml).join("") + "</ul></section>"
+        ? '<section class="panel"><div class="row between"><h2>A second look at your causes</h2>' +
+          (TUTOR.enabled() ? '<span class="pill info">Checked by the AI tutor</span>' : "") + "</div>" +
+          causeSummaryHtml() + '<ul class="cause-notes">' + misses().map(noteHtml).join("") + "</ul></section>"
         : "") +
       p.skills.map((s, i) =>
         '<section class="panel plan-skill">' +
