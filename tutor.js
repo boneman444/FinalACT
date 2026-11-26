@@ -13,7 +13,7 @@
   // Until then the tutor is off and every hint and message comes from the item bank.
   const RELAY_URL = "https://finalact-tutor.dylanmichaelbona.workers.dev";
   const OVERRIDE_KEY = "finalact.tutorUrl"; // for testing: localStorage.setItem("finalact.tutorUrl", "<url>")
-  const TIMEOUT_MS = 8000;
+  const TIMEOUT_MS = 15000; // cause checks run ~10 at once and can take 8s+ under that load
   const MAX_WORDS = 60; // prompt asks for 45; replies over this get one rewrite
 
   function relayUrl() {
@@ -91,7 +91,10 @@
       const data = await res.json();
       if (!data || typeof data.text !== "string" || !data.text.trim()) return { ok: false, reason: "empty" };
       if (data.model) api.model = data.model;
-      return { ok: true, text: data.text.trim() };
+      // The prompt asks the model to count words; drop it if it reports the count ("Word count: 44").
+      const text = data.text.replace(/^\s*\(?word count:?\s*\d+\)?\.?\s*$/gim, "").trim();
+      if (!text) return { ok: false, reason: "empty" };
+      return { ok: true, text: text };
     } catch (e) {
       return { ok: false, reason: e && e.name === "AbortError" ? "timeout" : "network" };
     } finally {
