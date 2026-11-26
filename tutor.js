@@ -75,6 +75,23 @@
     return null;
   }
 
+  /* ---------- notes to itself ---------- */
+
+  // The model sometimes adds a note about its own reply after the hint ("Word count: about 42 words,
+  // under the limit." or "Wait, that gives away the next step. Let me rewrite it."). Students should
+  // never see those, so any line that talks about the reply itself is dropped.
+  const META = /(\bword\s*count\b|^\s*\(?\s*count\s*:|\b(?:under|over|within)\s+(?:the\s+)?(?:\d+[- ]word\s+)?limit\b|\blet me (?:rewrite|trim|revise|fix|redo|try)|^\s*wait\b|\bgives away the\b|\b(?:at|for) level [123]\b)/im;
+
+  function clean(raw) {
+    return String(raw)
+      .replace(/<br\s*\/?>/gi, "\n")
+      .split(/\n\s*\n/)
+      .map((p) => p.split("\n").filter((l) => !META.test(l)).join("\n").trim())
+      .filter(Boolean)
+      .join("\n\n")
+      .trim();
+  }
+
   /* ---------- requests ---------- */
 
   async function once(task, payload) {
@@ -91,8 +108,7 @@
       const data = await res.json();
       if (!data || typeof data.text !== "string" || !data.text.trim()) return { ok: false, reason: "empty" };
       if (data.model) api.model = data.model;
-      // The prompt asks the model to count words; drop it if it reports the count ("Word count: 44").
-      const text = data.text.replace(/^\s*\(?word count:?\s*\d+\)?\.?\s*$/gim, "").trim();
+      const text = clean(data.text);
       if (!text) return { ok: false, reason: "empty" };
       return { ok: true, text: text };
     } catch (e) {
@@ -130,6 +146,7 @@
     ask: ask,
     itemContext: itemContext,
     leaks: leaks,
+    clean: clean,
     model: null
   };
   window.FinalACTTutor = api;
