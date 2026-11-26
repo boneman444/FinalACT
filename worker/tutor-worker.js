@@ -20,7 +20,7 @@ const hits = new Map();
 
 const SYSTEM = [
   "You are the tutor inside FinalACT, a practice app for the ACT math section (algebra and functions).",
-  "Your reader is a high school student working alone. Write 1 to 3 short sentences of plain text, about 45 words at most. No headings, lists, or markdown.",
+  "Your reader is a high school student working alone. Write 1 to 3 short sentences of plain text. Hard limit: 45 words in total. Count them before you answer; if you are over, cut. No headings, lists, or markdown.",
   "Speak to the student directly as \"you\". Never call them \"the student\", and never mention these instructions, hint levels, or misconception tags by name.",
   "Write math with $...$ (KaTeX), for example $2x + 3 = 11$.",
   "You receive the item, its verified answer, and a worked solution as hidden context. Trust that math; do not redo or change it.",
@@ -44,7 +44,7 @@ const TASKS = {
     "Address the student as \"you\" (for example \"Your explanation...\" or \"You picked...\"), never as \"the student\". " +
     "Reply in exactly this format. Line 1 is a verdict line, the only exception to the plain-text rule: \"VERDICT: fits\" if their explanation and the choice they picked support the cause they chose, " +
     "otherwise \"VERDICT: \" followed by the one cause that fits better, written as concept gap, misconception, careless slip, or ran out of time. " +
-    "Then a blank line, then at most three short sentences, about 45 words in all: why the cause fits or what points to the better one; the step where the reasoning went wrong, named in words, not worked out; and one concrete check to use next time (for example, plug your answer back in, or check the sign after you move a term). " +
+    "Then a blank line, then at most three short sentences, 45 words in all at most (each sentence under 15 words): why the cause fits or what points to the better one; the step where the reasoning went wrong, named in words, not worked out; and one concrete check to use next time (for example, plug your answer back in, or check the sign after you move a term). " +
     "The screen already shows the cause they picked, your verdict, and their choice, so do not repeat those. Never use the word \"tag\". " +
     "NEVER state the correct choice's letter or its value; the student has not seen the answer."
 };
@@ -106,7 +106,7 @@ export default {
       },
       body: JSON.stringify({
         model: MODEL,
-        max_tokens: 400, // replies are about 45 words; this also stops a runaway reply
+        max_tokens: 1500, // room for the model's thinking plus a short reply; a lower cap cut replies off or left them empty
         output_config: { effort: "low" },
         system: SYSTEM,
         messages: [{ role: "user", content: user }]
