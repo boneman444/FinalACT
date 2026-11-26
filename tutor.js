@@ -107,6 +107,8 @@
     const t0 = Date.now();
     if (!relayUrl()) return { ok: false, reason: "off", ms: 0 };
     let r = await once(task, payload);
+    // One retry for a passing failure (server error, timeout, network, empty reply).
+    if (!r.ok) r = await once(task, payload);
     // Length backstop: one rewrite when a reply runs well past the ~45-word limit (the VERDICT line doesn't count).
     const words = (t) => t.replace(/^VERDICT:.*$/m, "").trim().split(/\s+/).filter(Boolean).length;
     if (r.ok && words(r.text) > MAX_WORDS) {

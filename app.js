@@ -186,7 +186,7 @@
         const parts = line.split(/\$([^$]+)\$/);
         return '<span class="line">' + parts.map((p, i) => (i % 2 ? tex(p) : esc(p))).join("") + "</span>";
       })
-      .join("");
+      .join(" "); // tutor replies put sentences on separate lines; inline lines need a space between them
   }
 
   function fmtClock(ms) {
@@ -912,14 +912,19 @@
     return { verdict: key === chosen ? "fits" : key, text: text };
   }
 
+  // A note that fell back to the written text is asked for again once per page load, so a passing
+  // tutor failure doesn't leave it unchecked for good.
+  const causeAsked = new Set();
   function loadCauseNotes() {
     const p = cyc().plan;
     misses().forEach((r) => {
       const entry = cyc().review[r.id];
       const key = r.id;
-      if (p.notes[key]) return;
-      p.notes[key] = { text: fallbackCauseNote(r, entry), source: "written" };
+      const askKey = S.cycle + ":" + key;
+      if (p.notes[key] && (p.notes[key].source === "tutor" || causeAsked.has(askKey) || !TUTOR.enabled())) return;
+      if (!p.notes[key]) p.notes[key] = { text: fallbackCauseNote(r, entry), source: "written" };
       if (!TUTOR.enabled()) return;
+      causeAsked.add(askKey);
       const it = byId[r.id];
       TUTOR.ask("cause_check", {
         item: TUTOR.itemContext(it),
