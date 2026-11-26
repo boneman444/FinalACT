@@ -14,6 +14,7 @@
   const RELAY_URL = "https://finalact-tutor.dylanmichaelbona.workers.dev";
   const OVERRIDE_KEY = "finalact.tutorUrl"; // for testing: localStorage.setItem("finalact.tutorUrl", "<url>")
   const TIMEOUT_MS = 8000;
+  const MAX_WORDS = 60; // prompt asks for 45; replies over this get one rewrite
 
   function relayUrl() {
     try {
@@ -103,6 +104,12 @@
     const t0 = Date.now();
     if (!relayUrl()) return { ok: false, reason: "off", ms: 0 };
     let r = await once(task, payload);
+    // Length backstop: one rewrite when a reply runs well past the ~45-word limit (the VERDICT line doesn't count).
+    const words = (t) => t.replace(/^VERDICT:.*$/m, "").trim().split(/\s+/).filter(Boolean).length;
+    if (r.ok && words(r.text) > MAX_WORDS) {
+      const short = await once(task, Object.assign({}, payload, { retry_note: "Your last reply was " + words(r.text) + " words. Write it again in 45 words or fewer, same format." }));
+      if (short.ok && words(short.text) < words(r.text)) r = Object.assign(short, { shortened: true });
+    }
     if (r.ok && guard && leaks(r.text, item)) {
       const why = leaks(r.text, item);
       r = await once(task, Object.assign({}, payload, { retry_note: "Your last reply revealed the answer (" + why + "). Do not name the correct choice or its value." }));
