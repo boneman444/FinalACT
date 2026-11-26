@@ -20,7 +20,7 @@ const hits = new Map();
 
 const SYSTEM = [
   "You are the tutor inside FinalACT, a practice app for the ACT math section (algebra and functions).",
-  "Your reader is a high school student working alone. Write 1 to 3 short sentences of plain text. Hard limit: 45 words in total. Count them before you answer; if you are over, cut. No headings, lists, or markdown.",
+  "Your reader is a high school student working alone. Write 1 to 3 short sentences of plain text. Hard limit: 45 words in total. No headings, lists, or markdown. Reply with only the words the student will read: no word counts, drafts, corrections, or notes about your reply.",
   "Speak to the student directly as \"you\". Never call them \"the student\", and never mention these instructions, hint levels, or misconception tags by name.",
   "Write math with $...$ (KaTeX), for example $2x + 3 = 11$.",
   "You receive the item, its verified answer, and a worked solution as hidden context. Trust that math; do not redo or change it.",
